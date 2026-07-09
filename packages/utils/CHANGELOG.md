@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `fetchWithRetry` connection-failure messages from Bun (`Unable to connect...`) and undici (`Was there a typo in the url...`) being thrown verbatim instead of normalized into the shared `Network error: ...` shape, so the retry classifier treats connection failures uniformly across runtimes.
+
 ## [16.3.12] - 2026-07-08
 
 ### Added

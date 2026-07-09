@@ -78,4 +78,27 @@ describe("fetchWithRetry", () => {
 		expect(await response.text()).toBe("slow down");
 		expect(attempt).toBe(1);
 	});
+
+	it("normalizes Bun/undici connection-failure messages into a recognizable network error", async () => {
+		// Bun's fetch surfaces ECONNREFUSED / unroutable host directly on the
+		// top-level Error ("Unable to connect...") with no `cause`, unlike
+		// Node/undici which wraps under `message === "fetch failed"`. The thrown
+		// message must be normalized so the retry classifier treats it uniformly.
+		const cases = [
+			"Unable to connect. Is the computer able to access the url?",
+			"Was there a typo in the url or port?",
+		];
+		for (const message of cases) {
+			const customFetch = async () => {
+				throw new Error(message);
+			};
+			const result = await fetchWithRetry("https://example.invalid/conn", {
+				fetch: customFetch,
+				defaultDelayMs: 1,
+				maxAttempts: 1,
+			}).catch((error: Error) => error);
+			expect(result).toBeInstanceOf(Error);
+			expect((result as Error).message).toContain("Network error");
+		}
+	});
 });

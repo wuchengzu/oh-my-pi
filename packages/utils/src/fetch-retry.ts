@@ -250,13 +250,31 @@ function wrapNetworkError(error: unknown): Error {
 		if (error.name === "AbortError" || error.message === "Request was aborted") {
 			return new Error("Request was aborted");
 		}
+		// Node/undici wraps the real cause under `message === "fetch failed"`.
 		if (error.message === "fetch failed" && error.cause instanceof Error) {
 			return new Error(`Network error: ${error.cause.message}`);
+		}
+		// Bun surfaces ECONNREFUSED / unreachable-host directly on the top-level
+		// Error ("Unable to connect..." / "Was there a typo in the url...?") with
+		// no `cause`. Normalize those into the same `Network error: ...` shape so
+		// the retry classifier (which keys on "network error") treats connection
+		// failures uniformly across runtimes and a retry.fallbackChains model
+		// switch fires instead of surfacing the raw transport text.
+		if (CONNECTION_FAILED_PATTERN.test(error.message)) {
+			return new Error(`Network error: ${error.message}`);
 		}
 		return error;
 	}
 	return new Error(String(error));
 }
+
+/**
+ * Phrasings Bun and some proxies use for a connection that never established
+ * (ECONNREFUSED, unroutable host). Kept separate from the shared transient
+ * pattern in `flags.ts` because this layer normalizes the message, while the
+ * classifier layer independently recognizes both shapes.
+ */
+const CONNECTION_FAILED_PATTERN = /unable to connect|typo in the (?:url|host|port)/i;
 
 function resolveDefaultDelay(
 	option: FetchWithRetryOptions["defaultDelayMs"],

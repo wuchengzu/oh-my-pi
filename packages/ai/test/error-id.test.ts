@@ -43,6 +43,23 @@ describe("error-id classification", () => {
 		expect(AIError.retriable(id)).toBe(true);
 	});
 
+	it("classifies Bun/undici connection-failure text as transient and retriable", () => {
+		// Bun surfaces ECONNREFUSED / unroutable host directly ("Unable to
+		// connect..."); undici phrases it as "Was there a typo in the url...".
+		// Both must be transient so a retry.fallbackChains model switch fires
+		// when a provider gateway is unreachable, instead of surfacing the raw
+		// transport error.
+		for (const errorMessage of [
+			"Unable to connect. Is the computer able to access the url?",
+			"Was there a typo in the url or port?",
+		]) {
+			const assistant = message({ errorMessage });
+			const id = AIError.classifyMessage(assistant);
+			expect(AIError.is(id, AIError.Flag.Transient)).toBe(true);
+			expect(AIError.retriable(id)).toBe(true);
+		}
+	});
+
 	it("keeps raw status fallback unclassified", () => {
 		const id = 503;
 		expect(AIError.is(id, AIError.Flag.Class)).toBe(false);
